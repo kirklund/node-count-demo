@@ -11,9 +11,9 @@ import org.junit.Test;
 import java.io.Serializable;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.apache.geode.test.dunit.VM.*;
+import static org.apache.geode.test.dunit.VM.getVM;
+import static org.apache.geode.test.dunit.VM.getVMCount;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.withPrecision;
 
 /**
  * There are nodes/ set of computers(A, B, C, D, E, F for example) in the range of 1 to a million connected in a bus-type network.
@@ -78,7 +78,7 @@ public class NodeCountDemoDistributedTest implements Serializable {
 
     public static class Node implements Receiver, Serializable {
 
-        private static final AtomicReference<Node> STATIC = new AtomicReference<>();
+        private static final AtomicReference<Receiver> CALLBACK = new AtomicReference<>();
         private final String name;
         private final VM left;
         private final VM right;
@@ -87,7 +87,7 @@ public class NodeCountDemoDistributedTest implements Serializable {
 
         public static Node create(String name, VM left, VM right) {
             Node node = new Node(name, left, right);
-            STATIC.set(node);
+            CALLBACK.set(node);
             return node;
         }
 
@@ -97,13 +97,10 @@ public class NodeCountDemoDistributedTest implements Serializable {
             this.right = right;
         }
 
-        private void debug(String operation, int val) {
-            System.out.println(String.format("%s: %s val=%d, nodeCount=%d, sender=%b", name, operation, val, nodeCount, sender));
-        }
-
         @Override
         public void receiveFromLeft(int val) {
             debug("receiveFromLeft", val);
+
             if (sender) {
                 nodeCount += val;
                 return;
@@ -124,6 +121,7 @@ public class NodeCountDemoDistributedTest implements Serializable {
         @Override
         public void receiveFromRight(int val) {
             debug("receiveFromRight", val);
+
             // do NOT change value when returning value to the left
             if (hasLeft()) {
                 // continue returning to the left
@@ -145,12 +143,16 @@ public class NodeCountDemoDistributedTest implements Serializable {
 
         public void sendToLeft(int val) {
             assertThat(hasLeft()).isTrue();
-            left.invoke(() -> STATIC.get().receiveFromRight(val));
+            left.invoke(() -> CALLBACK.get().receiveFromRight(val));
         }
 
         public void sendToRight(int val) {
             assertThat(hasRight()).isTrue();
-            right.invoke(() -> STATIC.get().receiveFromLeft(val));
+            right.invoke(() -> CALLBACK.get().receiveFromLeft(val));
+        }
+
+        private void debug(String operation, int val) {
+            System.out.println(String.format("%s: %s val=%d, nodeCount=%d, sender=%b", name, operation, val, nodeCount, sender));
         }
     }
 
